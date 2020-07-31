@@ -14,6 +14,7 @@ struct termios otty,ntty;
 
 #define SIZE_V 20
 #define SIZE_H 10
+#define SIZE_GRAPH 5
 #define BACKGROUND 47
 #define COLOR_Z 41
 #define COLOR_S 42
@@ -42,54 +43,62 @@ struct termios otty,ntty;
 #define QUIT 4096
 #define FPS 60
 
-int mino_graph[8][4][4] = {
+int mino_graph[8][SIZE_GRAPH][SIZE_GRAPH] = {
     {
-        {COLOR_Z, COLOR_Z, BACKGROUND, BACKGROUND}, 
-        {BACKGROUND, COLOR_Z, COLOR_Z, BACKGROUND},
-        {BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND},
-        {BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND}
+        {BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND},
+        {BACKGROUND, COLOR_Z, COLOR_Z, BACKGROUND, BACKGROUND}, 
+        {BACKGROUND, BACKGROUND, COLOR_Z, COLOR_Z, BACKGROUND},
+        {BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND},
+        {BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND}
     },
     {
-        {BACKGROUND, COLOR_S, COLOR_S, BACKGROUND},
-        {COLOR_S, COLOR_S, BACKGROUND, BACKGROUND},
-        {BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND},
-        {BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND}
+        {BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND},
+        {BACKGROUND, BACKGROUND, COLOR_S, COLOR_S, BACKGROUND},
+        {BACKGROUND, COLOR_S, COLOR_S, BACKGROUND, BACKGROUND},
+        {BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND},
+        {BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND}
     },
     {
-        {BACKGROUND, BACKGROUND, COLOR_L, BACKGROUND},
-        {COLOR_L, COLOR_L, COLOR_L, BACKGROUND},
-        {BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND},
-        {BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND}
+        {BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND},
+        {BACKGROUND, BACKGROUND, BACKGROUND, COLOR_L, BACKGROUND},
+        {BACKGROUND, COLOR_L, COLOR_L, COLOR_L, BACKGROUND},
+        {BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND},
+        {BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND}
     },
     {
-        {COLOR_J, BACKGROUND, BACKGROUND, BACKGROUND},
-        {COLOR_J, COLOR_J, COLOR_J, BACKGROUND},
-        {BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND},
-        {BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND}
+        {BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND},
+        {BACKGROUND, COLOR_J, BACKGROUND, BACKGROUND, BACKGROUND},
+        {BACKGROUND, COLOR_J, COLOR_J, COLOR_J, BACKGROUND},
+        {BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND},
+        {BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND}
     },
     {
-        {BACKGROUND, COLOR_T, BACKGROUND, BACKGROUND},
-        {COLOR_T, COLOR_T, COLOR_T, BACKGROUND},
-        {BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND},
-        {BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND}
+        {BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND},
+        {BACKGROUND, BACKGROUND, COLOR_T, BACKGROUND, BACKGROUND},
+        {BACKGROUND, COLOR_T, COLOR_T, COLOR_T, BACKGROUND},
+        {BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND},
+        {BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND}
     },
     {
-        {BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND},
-        {COLOR_I, COLOR_I, COLOR_I, COLOR_I},
-        {BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND},
-        {BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND}
+        {BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND},
+        {BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND},
+        {BACKGROUND, COLOR_I, COLOR_I, COLOR_I, COLOR_I},
+        {BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND},
+        {BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND}
     },
     {
-        {BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND},
-        {BACKGROUND, COLOR_O, COLOR_O, BACKGROUND},
-        {BACKGROUND, COLOR_O, COLOR_O, BACKGROUND},
-        {BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND}
+        {BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND},
+        {BACKGROUND, BACKGROUND, COLOR_O, COLOR_O, BACKGROUND},
+        {BACKGROUND, BACKGROUND, COLOR_O, COLOR_O, BACKGROUND},
+        {BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND},
+        {BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND}
     },
     {
-        {BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND},
-        {BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND},
-        {BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND},
-        {BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND}
+        {BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND},
+        {BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND},
+        {BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND},
+        {BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND},
+        {BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND, BACKGROUND}
     }
 };
 
@@ -98,7 +107,7 @@ struct mino{
     int x;
     int y;
     int rotate;
-    int stoping_since;
+    int stopping_frame;
 };
 
 struct seed{
@@ -113,14 +122,13 @@ struct gameInfo {
     int score;
     int hold;
     int isRunning;
-    long long frame;
 };
 
 int next_mino(struct gameInfo* info);
 int initialize(int cell_color[SIZE_V][SIZE_H], struct gameInfo* info);
 int process_input(void);
-int rotate_graph(int graph[4][4]);
-int graph_mino(int graph[4][4], struct mino* current_mino);
+int rotate_graph(int graph[SIZE_GRAPH][SIZE_GRAPH]);
+int graph_mino(int graph[SIZE_GRAPH][SIZE_GRAPH], struct mino* current_mino);
 int put_mino(int cell_color[SIZE_V][SIZE_H], struct mino* current_mino);
 int move_mino(int cell_color[SIZE_V][SIZE_H], struct mino* current_mino, int bitflag);
 int check_line(int cell_color[SIZE_V][SIZE_H]);
@@ -228,7 +236,6 @@ int initialize(int cell_color[SIZE_V][SIZE_H], struct gameInfo* info){
     info->hold = 7;
     info->isRunning = 1;
     info->score = 0;
-    info->frame = 0;
     
     for(int y = 0; y < SIZE_V; ++y){
         for(int x = 0; x < SIZE_H; ++x){
@@ -249,20 +256,19 @@ int initialize(int cell_color[SIZE_V][SIZE_H], struct gameInfo* info){
 /**
  * 反時計回りにグラフを90度回転させる. 
 */
-int rotate_graph(int graph[4][4]){
-    int rotated_graph[4][4];
+int rotate_graph(int graph[SIZE_GRAPH][SIZE_GRAPH]){
+    int rotated_graph[SIZE_GRAPH][SIZE_GRAPH];
 
-    for(int i = 0; i < 3; ++i){
-        for(int j = 0; j < 4; ++j){
-            rotated_graph[j][2-i] = graph[i][j];
+    for(int i = 0; i < SIZE_GRAPH; ++i){
+        for(int j = 0; j < SIZE_GRAPH; ++j){
+            rotated_graph[j][SIZE_GRAPH - 1 - i] = graph[i][j];
         }
     }
 
-    for(int i = 0; i < 4; ++i){
-        for(int j = 0; j < 3; ++j){
+    for(int i = 0; i < SIZE_GRAPH; ++i){
+        for(int j = 0; j < SIZE_GRAPH; ++j){
             graph[i][j] = rotated_graph[i][j];
         }
-        graph[i][3] = BACKGROUND;
     }
 
     return 0;
@@ -271,9 +277,9 @@ int rotate_graph(int graph[4][4]){
 /**
 * 指定ミノを指定方向に回転させたときのミノの図を求める. 
 */
-int graph_mino(int graph[4][4], struct mino* current_mino){
-    for(int i = 0; i < 4; ++i){
-        for(int j = 0; j < 4; ++j){
+int graph_mino(int graph[SIZE_GRAPH][SIZE_GRAPH], struct mino* current_mino){
+    for(int i = 0; i < SIZE_GRAPH; ++i){
+        for(int j = 0; j < SIZE_GRAPH; ++j){
             graph[i][j] = mino_graph[current_mino->mino_id][i][j];
         }
     }
@@ -290,27 +296,27 @@ int graph_mino(int graph[4][4], struct mino* current_mino){
  * ミノを指定位置に設置することができない場合は-1を返す. 
 */
 int put_mino(int cell_color[SIZE_V][SIZE_H], struct mino* current_mino){
-    int graph[4][4];
+    int graph[SIZE_GRAPH][SIZE_GRAPH];
     graph_mino(graph, current_mino);
 
-    for(int i = 0; i < 4; ++i){
-        for(int j = 0; j < 4; ++j){
+    for(int i = 0; i < SIZE_GRAPH; ++i){
+        for(int j = 0; j < SIZE_GRAPH; ++j){
             if(graph[i][j] == BACKGROUND) continue;
-            else if(current_mino->x - 1 + j < 0 || current_mino->x - 1 + j >= SIZE_H
-                || current_mino->y - 1 + i < 0 || current_mino->y - 1 + i >= SIZE_V){
+            else if(current_mino->x - 2 + j < 0 || current_mino->x - 2 + j >= SIZE_H
+                || current_mino->y - 2 + i < 0 || current_mino->y - 2 + i >= SIZE_V){
                 return -1;
-            }else if(cell_color[current_mino->y-1+i][current_mino->x-1+j] != BACKGROUND){
+            }else if(cell_color[current_mino->y-2+i][current_mino->x-2+j] != BACKGROUND){
                 return -1;
             }
         }
     }
 
-    for(int i = 0; i < 4; ++i){
-        for(int j = 0; j < 4; ++j){
-            if(current_mino->x - 1 + j >= 0 && current_mino->x - 1 + j < SIZE_H
-                && current_mino->y - 1 + i >= 0 && current_mino->y - 1 + i < SIZE_V){
+    for(int i = 0; i < SIZE_GRAPH; ++i){
+        for(int j = 0; j < SIZE_GRAPH; ++j){
+            if(current_mino->x - 2 + j >= 0 && current_mino->x - 2 + j < SIZE_H
+                && current_mino->y - 2 + i >= 0 && current_mino->y - 2 + i < SIZE_V){
                 
-                cell_color[current_mino->y-1+i][current_mino->x-1+j] = graph[i][j];
+                cell_color[current_mino->y-2+i][current_mino->x-2+j] = graph[i][j];
             }
         }
     }
@@ -319,13 +325,13 @@ int put_mino(int cell_color[SIZE_V][SIZE_H], struct mino* current_mino){
 }
 
 int delete_mino(int cell_color[SIZE_V][SIZE_H], struct mino* current_mino){
-    int graph[4][4];
+    int graph[SIZE_GRAPH][SIZE_GRAPH];
     graph_mino(graph, current_mino);
 
-    for(int i = 0; i < 4; ++i){
-        for(int j = 0; j < 4; ++j){
+    for(int i = 0; i < SIZE_GRAPH; ++i){
+        for(int j = 0; j < SIZE_GRAPH; ++j){
             if(graph[i][j] != BACKGROUND){
-                cell_color[current_mino->y-1+i][current_mino->x-1+j] = BACKGROUND;
+                cell_color[current_mino->y-2+i][current_mino->x-2+j] = BACKGROUND;
             }
         }
     }
@@ -338,17 +344,36 @@ int delete_mino(int cell_color[SIZE_V][SIZE_H], struct mino* current_mino){
  * ただし, ミノが動かせない状況である場合はミノを動かさず, -1を返す. 
 */
 int move_mino(int cell_color[SIZE_V][SIZE_H], struct mino* current_mino, int bitflag){
-    struct mino mino_cpy = *current_mino;
+    if(bitflag == 0){
+        return -1;
+    }
     
-    if(bitflag&MOVE_ROTATE_L) current_mino->rotate = (current_mino->rotate + 4 + 1)%4;
-    if(bitflag&MOVE_ROTATE_R) current_mino->rotate = (current_mino->rotate + 4 - 1)%4;
+    struct mino mino_cpy = *current_mino;
+    delete_mino(cell_color, current_mino);
+
+    if(bitflag&MOVE_ROTATE_L) current_mino->rotate = (current_mino->rotate + 4 - 1)%4;
+    if(bitflag&MOVE_ROTATE_R) current_mino->rotate = (current_mino->rotate + 4 + 1)%4;
     if(bitflag&MOVE_L) current_mino->x -= 1;
     if(bitflag&MOVE_R) current_mino->x += 1;
     if(bitflag&MOVE_SOFT_DROP) current_mino->y += 1;
 
-    delete_mino(cell_color, current_mino);
     int isPossible = put_mino(cell_color, current_mino);
+    if(isPossible == -1){
+        *current_mino = mino_cpy;
+        put_mino(cell_color, current_mino);
+        return -1;
+    }
     
+    return 0;
+}
+
+int pop_next(int cell_color[SIZE_V][SIZE_H], struct gameInfo* info){
+    info->current_mino.mino_id = next_mino(info);
+    info->current_mino.rotate = 0;
+    info->current_mino.stopping_frame = 0;
+    info->current_mino.x = 4;
+    info->current_mino.y = 1;
+
     return 0;
 }
 
@@ -468,7 +493,6 @@ int process_input(void){
  * の順で処理を行う.
 */
 int update(int cell_color[SIZE_V][SIZE_H], struct gameInfo* info){
-    info->frame += 1;
     int bitflag = process_input();
     if(bitflag&QUIT){
         info->isRunning = 0;
@@ -476,9 +500,19 @@ int update(int cell_color[SIZE_V][SIZE_H], struct gameInfo* info){
     }
     
     int isMoved = move_mino(cell_color, &(info->current_mino), bitflag);
-    //動いていなければ, そのときの処理をおこなう(後で書く)
+    if(isMoved == 0) {
+        info->current_mino.stopping_frame = 0;
+    }
+    else {
+        info->current_mino.stopping_frame += 1;
+        if(info->current_mino.stopping_frame >= FPS){
+            if(move_mino(cell_color, &(info->current_mino), MOVE_SOFT_DROP)){
+                info->score += 100 * check_line(cell_color);
+                pop_next(cell_color, info);
+            }
+        }
+    }
 
-    check_line(cell_color);
     repaint(cell_color, info);
 
     return 0;
@@ -495,7 +529,8 @@ int tetoris(void){
     gettimeofday(&pre_time, NULL);
     while(info.isRunning){
         gettimeofday(&current_time, NULL);
-        if(pre_time.tv_sec*1000+pre_time.tv_usec/1000 - current_time.tv_sec*1000+current_time.tv_usec/1000 < 1000/FPS){
+        if(pre_time.tv_sec*1000+pre_time.tv_usec/1000 - current_time.tv_sec*1000-current_time.tv_usec/1000 < 1000/FPS){
+            printf("\r%ld", pre_time.tv_sec*1000+pre_time.tv_usec/1000 - current_time.tv_sec*1000-current_time.tv_usec/1000);
             continue;
         }else{
             pre_time = current_time;
