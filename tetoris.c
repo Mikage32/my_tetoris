@@ -49,14 +49,29 @@ struct mino{
     int rotate;
 };
 
-int next_mino(int mino, int l_0, int k, int i);
-int initialize(int cell_color[SIZE_V][SIZE_H], int pre_cell_color[SIZE_V][SIZE_H], struct mino* current_mino, int* l_0, int* k);
+struct seed{
+    int l_0;
+    int k;
+    int i;
+};
+
+struct gameInfo {
+    struct seed mino_seed;
+    struct mino current_mino;
+    int score;
+    int hold;
+    int isRunning;
+    long long frame;
+};
+
+int next_mino(struct gameInfo* info);
+int initialize(int cell_color[SIZE_V][SIZE_H], struct gameInfo* info);
 int process_input(void);
-int rotate_mino(struct mino* current_mino, int lr);
-int move_mino(struct mino* current_mino);
+int rotate_mino(int cell_color[SIZE_V][SIZE_H],struct mino* current_mino, int lr);
+int move_mino(int cell_color[SIZE_V][SIZE_H], struct mino* current_mino);
 int check_line(int cell_color[SIZE_V][SIZE_H]);
-int repaint(int cell_color[SIZE_V][SIZE_H], int pre_cell_color[SIZE_V][SIZE_H], int score, int hold, int next);
-int update(int cell_color[SIZE_V][SIZE_H], int pre_cell_color[SIZE_V][SIZE_H], int score, int hold, int next, int* isRunning);
+int repaint(int cell_color[SIZE_V][SIZE_H], struct gameInfo* info);
+int update(int cell_color[SIZE_V][SIZE_H], struct gameInfo* info);
 int tetoris(void);
 
 static void onsignal(int sig) {
@@ -119,23 +134,32 @@ int main(void){
     return 0;
 }
 
-int next_mino(int mino, int l_0, int k, int i){
-    return (mino + (l_0+k*(i/7))%6 + 1)%7;
+int next_mino(struct gameInfo* info){
+    return (info->current_mino.mino_id + (info->mino_seed.l_0+info->mino_seed.k*(info->mino_seed.i/7))%6 + 1)%7;
 }
 
-int initialize(int cell_color[SIZE_V][SIZE_H], int pre_cell_color[SIZE_V][SIZE_H], struct mino* current_mino, int* l_0, int* k){
+int initialize(int cell_color[SIZE_V][SIZE_H], struct gameInfo* info){
     system("clear");
-    
     srand(time(NULL));
-    current_mino->mino_id = rand()%7;
-    *l_0 = rand()%7;
-    *k = rand()%6;
-    if(*k == 0) *k += 1;
+
+    info->current_mino.mino_id = rand()%7;
+    info->current_mino.rotate = 0;
+    info->current_mino.x = 4;
+    info->current_mino.y = 1;
+    
+    info->mino_seed.l_0 = rand()%7;
+    info->mino_seed.k = rand()%6;
+    if(info->mino_seed.k == 0) info->mino_seed.k += 1;
+    info->mino_seed.i = 0;
+
+    info->hold = 7;
+    info->isRunning = 1;
+    info->score = 0;
+    info->frame = 0;
     
     for(int y = 0; y < SIZE_V; ++y){
         for(int x = 0; x < SIZE_H; ++x){
             cell_color[y][x] = BACKGROUND;
-            pre_cell_color[y][x] = 0;
         }
     }
 
@@ -143,22 +167,26 @@ int initialize(int cell_color[SIZE_V][SIZE_H], int pre_cell_color[SIZE_V][SIZE_H
     for(int i = 0;i < SIZE_V; ++i) printf("\n");
     printf("\n");
 
-    repaint(cell_color, pre_cell_color, 0, 7, next_mino(current_mino->mino_id, *l_0, *k, 0));
-
-    for(int y = 0; y < SIZE_V; ++y){
-        for(int x = 0; x < SIZE_H; ++x){
-            pre_cell_color[y][x] = BACKGROUND;
-        }
-    }
+    repaint(cell_color, info);
 
     return 0;
 }
 
-int rotate_mino(struct mino* current_mino, int lr){
+/**
+* 操作中のミノを指定方向に回転させる. 
+* ただし, 回転できない状況である場合は回転を行わず, -1を返す. 
+*/
+int rotate_mino(int cell_color[SIZE_V][SIZE_H], struct mino* current_mino, int lr){
+    
+    
     current_mino->rotate += 4+lr;
     current_mino->rotate %= 4;
     
     return 0;
+}
+
+int move_mino(int cell_color[SIZE_V][SIZE_H], struct mino* current_mino, int bitflag){
+
 }
 
 int check_line(int cell_color[SIZE_V][SIZE_H]){
@@ -185,28 +213,24 @@ int check_line(int cell_color[SIZE_V][SIZE_H]){
     return counter;
 }
 
-int repaint(int cell_color[SIZE_V][SIZE_H], int pre_cell_color[SIZE_V][SIZE_H], int score, int hold, int next){
+int repaint(int cell_color[SIZE_V][SIZE_H], struct gameInfo* info){
     printf("\e[%dA", 1+SIZE_V+2);
     
     printf("\e[2K");
-    printf("\rHOLD: %d\n", hold);
+    printf("\rHOLD: %d\n", info->hold);
     printf("\e[2K");
-    printf("\rNEXT: %d\n", next);
+    printf("\rNEXT: %d\n", next_mino(info));
     
     for(int y = 0; y < SIZE_V; ++y){
         printf("\r");
         for(int x = 0; x < SIZE_H; ++x){
-            if(pre_cell_color[y][x] != cell_color[y][x]){
-                printf("\x1b[%dm  \x1b[m", cell_color[y][x]);
-            }else{
-                printf("\e[1C");
-            }
+            printf("\x1b[%dm  \x1b[m", cell_color[y][x]);
         }
         printf("\n");
     }
     
     printf("\x1b[0m");
-    printf("\rSCORE: %d\n\r", score);
+    printf("\rSCORE: %d\n\r", info->score);
 
     return 0;
 }
@@ -262,40 +286,33 @@ int process_input(void){
     return bitflag;
 }
 
-int update(int cell_color[SIZE_V][SIZE_H], int pre_cell_color[SIZE_V][SIZE_H], int score, int hold, int next, int* isRunning){
-    for(int i = 0; i < SIZE_V; ++i) memcpy(pre_cell_color[i], cell_color[i], sizeof(int)*SIZE_H);
-    
+int update(int cell_color[SIZE_V][SIZE_H], struct gameInfo* info){
+    info->frame += 1;
     int bitflag = process_input();
     if(bitflag&QUIT){
-        *isRunning = 0;
+        info->isRunning = 0;
         return 0;
     }
-    if(bitflag&MOVE_L) printf("\e[2KL");
-    if(bitflag&MOVE_R) printf("\e[2KR");
-    if(bitflag&MOVE_ROTATE_L) printf("\e[2KRL");
-    if(bitflag&MOVE_ROTATE_R) printf("\e[2KRR");
-    if(bitflag&MOVE_HOLD) printf("\e[2KHOLD");
-    if(bitflag&MOVE_SOFT_DROP) printf("\e[2KSOFT DROP");
-    if(bitflag&MOVE_HARD_DROP) printf("\e[2KHARD DROP");
+    
+    int isMoved = move_mino(cell_color, &(info->current_mino), bitflag);
+    //動いていなければ, そのときの処理をおこなう(後で書く)
 
     check_line(cell_color);
-
-    repaint(cell_color, pre_cell_color, score, hold, next);
+    repaint(cell_color, info);
 
     return 0;
 }
 
 int tetoris(void){
-    int l_0, k, i = 0, hold = 7, score = 0, isRunning = 1;
-    struct mino current_mino;
+    struct gameInfo info;
+
     struct timeval pre_time, current_time;
     int cell_color[SIZE_V][SIZE_H];
-    int pre_cell_color[SIZE_V][SIZE_H];
     
-    initialize(cell_color, pre_cell_color, &current_mino, &l_0, &k);
+    initialize(cell_color, &info);
 
     gettimeofday(&pre_time, NULL);
-    while(isRunning){
+    while(info.isRunning){
         gettimeofday(&current_time, NULL);
         if(pre_time.tv_sec*1000+pre_time.tv_usec/1000 - current_time.tv_sec*1000+current_time.tv_usec/1000 < 1000/FPS){
             continue;
@@ -303,11 +320,11 @@ int tetoris(void){
             pre_time = current_time;
         }
 
-        update(cell_color, pre_cell_color, score, hold, next_mino(current_mino.mino_id, l_0, k, i), &isRunning);
+        update(cell_color, &info);
     }
     
     system("clear");
-    printf("\rGAME OVER\n\rSCORE: %d\n", score);
+    printf("\rGAME OVER\n\rSCORE: %d\n", info.score);
     
     return 0;
 }
