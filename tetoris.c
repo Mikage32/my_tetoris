@@ -47,6 +47,7 @@ struct mino{
     int x;
     int y;
     int rotate;
+    int stoping_since;
 };
 
 struct seed{
@@ -73,6 +74,13 @@ int check_line(int cell_color[SIZE_V][SIZE_H]);
 int repaint(int cell_color[SIZE_V][SIZE_H], struct gameInfo* info);
 int update(int cell_color[SIZE_V][SIZE_H], struct gameInfo* info);
 int tetoris(void);
+
+/*  
+    入力をリアルタイムに行うために非カノニカルモードに設定する処理群及び, 
+    文字入力読み込みの為の関数
+    サンプルプログラムを参考に一部を改変しつつ作成した. 
+*/
+/*******************************************************************************/
 
 static void onsignal(int sig) {
     signal(sig, SIG_IGN);
@@ -126,6 +134,8 @@ int getch(void) {
       return (int)c;
 }
 
+/*******************************************************************************/
+
 int main(void){
     tinit();
     tetoris();
@@ -134,10 +144,20 @@ int main(void){
     return 0;
 }
 
+/**
+ * game infoの内容から, NEXT MINOを計算して求める. 
+ * ミノは全部で7種類であり, それぞれを0~6の番号をつけて呼ぶとして, 第i番目のミノmは次の式で表される. 
+ * m_i = (m_{i-1}+l_{i/7}+1)%7
+ * l_i = (l_0 + k*i)%6 = (l_{i-1}+k)%6
+ * m_0, l_0, kはゲーム開始時にランダムに決められる. ただし, kはmod6において0でないこととする. 
+*/
 int next_mino(struct gameInfo* info){
     return (info->current_mino.mino_id + (info->mino_seed.l_0+info->mino_seed.k*(info->mino_seed.i/7))%6 + 1)%7;
 }
 
+/**
+ * 盤面を含むゲーム情報全般を初期化する. 
+*/
 int initialize(int cell_color[SIZE_V][SIZE_H], struct gameInfo* info){
     system("clear");
     srand(time(NULL));
@@ -173,7 +193,7 @@ int initialize(int cell_color[SIZE_V][SIZE_H], struct gameInfo* info){
 }
 
 /**
-* 操作中のミノを指定方向に回転させる. 
+* 操作中のミノを指定方向に回転させ, 0を返す. 
 * ただし, 回転できない状況である場合は回転を行わず, -1を返す. 
 */
 int rotate_mino(int cell_color[SIZE_V][SIZE_H], struct mino* current_mino, int lr){
@@ -185,8 +205,16 @@ int rotate_mino(int cell_color[SIZE_V][SIZE_H], struct mino* current_mino, int l
     return 0;
 }
 
+/**
+ * 操作中のミノをbitflagの内容に従って動かして, 0を返す. 
+ * ただし, 動かせない状況である場合はミノを動かさず, -1を返す. 
+*/
 int move_mino(int cell_color[SIZE_V][SIZE_H], struct mino* current_mino, int bitflag){
-
+    if(bitflag&MOVE_ROTATE_L) rotate_mino(cell_color, current_mino, 1);
+    if(bitflag&MOVE_ROTATE_R) rotate_mino(cell_color, current_mino, -1);
+    
+    
+    return 0;
 }
 
 int check_line(int cell_color[SIZE_V][SIZE_H]){
@@ -213,6 +241,12 @@ int check_line(int cell_color[SIZE_V][SIZE_H]){
     return counter;
 }
 
+/**
+ * cell_color及びgmae infoの情報を元に, ゲーム画面を表示する. 
+ * ゲーム画面は, 第1行目にHOLD MINO, 第2行目にNEXT MINO
+ * 第3行目からSIZE_H(=20)行にわたり盤面を行事する. 
+ * 第23行目にはSCOREを表示する. 
+*/
 int repaint(int cell_color[SIZE_V][SIZE_H], struct gameInfo* info){
     printf("\e[%dA", 1+SIZE_V+2);
     
@@ -235,6 +269,10 @@ int repaint(int cell_color[SIZE_V][SIZE_H], struct gameInfo* info){
     return 0;
 }
 
+/**
+ * キーボード入力を処理してフラグ情報に変換する. 
+ * 何も操作が無いときフラグは0である. 
+*/
 int process_input(void){
     int bitflag = 0;
 
@@ -286,6 +324,14 @@ int process_input(void){
     return bitflag;
 }
 
+/**
+ * ゲームを1フレーム更新する. 
+ * 1. キー入力
+ * 2. キー入力に応じた処理
+ * 3. 盤面の変更確認と処理
+ * 4. 描画
+ * の順で処理を行う.
+*/
 int update(int cell_color[SIZE_V][SIZE_H], struct gameInfo* info){
     info->frame += 1;
     int bitflag = process_input();
