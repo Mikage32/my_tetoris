@@ -227,6 +227,7 @@ int initialize(int cell_color[SIZE_V][SIZE_H], struct gameInfo* info){
     info->current_mino.rotate = 0;
     info->current_mino.x = 4;
     info->current_mino.y = 1;
+    info->current_mino.stopping_frame = 0;
     
     info->mino_seed.l_0 = rand()%7;
     info->mino_seed.k = rand()%6;
@@ -316,7 +317,9 @@ int put_mino(int cell_color[SIZE_V][SIZE_H], struct mino* current_mino){
             if(current_mino->x - 2 + j >= 0 && current_mino->x - 2 + j < SIZE_H
                 && current_mino->y - 2 + i >= 0 && current_mino->y - 2 + i < SIZE_V){
                 
-                cell_color[current_mino->y-2+i][current_mino->x-2+j] = graph[i][j];
+                if(cell_color[current_mino->y-2+i][current_mino->x-2+j] == BACKGROUND){
+                    cell_color[current_mino->y-2+i][current_mino->x-2+j] = graph[i][j];
+                }
             }
         }
     }
@@ -357,6 +360,12 @@ int move_mino(int cell_color[SIZE_V][SIZE_H], struct mino* current_mino, int bit
     if(bitflag&MOVE_R) current_mino->x += 1;
     if(bitflag&MOVE_SOFT_DROP) current_mino->y += 1;
 
+    if(bitflag&MOVE_HARD_DROP) {
+        while(move_mino(cell_color, current_mino, MOVE_SOFT_DROP) == 0);
+        current_mino->stopping_frame = FPS;
+        return -1;
+    }
+
     int isPossible = put_mino(cell_color, current_mino);
     if(isPossible == -1){
         *current_mino = mino_cpy;
@@ -374,6 +383,9 @@ int pop_next(int cell_color[SIZE_V][SIZE_H], struct gameInfo* info){
     info->current_mino.x = 4;
     info->current_mino.y = 1;
 
+    int game_over = put_mino(cell_color, &(info->current_mino));
+    if(game_over) return -1;
+
     return 0;
 }
 
@@ -389,7 +401,7 @@ int check_line(int cell_color[SIZE_V][SIZE_H]){
         }
         if(flag){
             ++counter;
-            for(int i = y; i > 0; ++i){
+            for(int i = y; i > 0; --i){
                 memcpy(cell_color[i], cell_color[i-1], sizeof(int)*SIZE_H);
             }
             if(y != 0) {
@@ -508,8 +520,12 @@ int update(int cell_color[SIZE_V][SIZE_H], struct gameInfo* info){
         if(info->current_mino.stopping_frame >= FPS){
             if(move_mino(cell_color, &(info->current_mino), MOVE_SOFT_DROP)){
                 info->score += 100 * check_line(cell_color);
-                pop_next(cell_color, info);
+                if(pop_next(cell_color, info)){
+                    return -1;
+                }
             }
+
+            info->current_mino.stopping_frame = 0;
         }
     }
 
@@ -529,14 +545,15 @@ int tetoris(void){
     gettimeofday(&pre_time, NULL);
     while(info.isRunning){
         gettimeofday(&current_time, NULL);
-        if(pre_time.tv_sec*1000+pre_time.tv_usec/1000 - current_time.tv_sec*1000-current_time.tv_usec/1000 < 1000/FPS){
-            printf("\r%ld", pre_time.tv_sec*1000+pre_time.tv_usec/1000 - current_time.tv_sec*1000-current_time.tv_usec/1000);
+        if(current_time.tv_sec*1000+current_time.tv_usec/1000 - (pre_time.tv_sec*1000+pre_time.tv_usec/1000) < 1000/FPS){
             continue;
         }else{
             pre_time = current_time;
         }
 
-        update(cell_color, &info);
+        if(update(cell_color, &info)){
+            break;
+        }
     }
     
     system("clear");
