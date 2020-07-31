@@ -93,8 +93,6 @@ int mino_graph[8][4][4] = {
     }
 };
 
-int cell_color[SIZE_V][SIZE_H];
-
 struct mino{
     int mino_id;
     int x;
@@ -119,15 +117,15 @@ struct gameInfo {
 };
 
 int next_mino(struct gameInfo* info);
-int initialize(struct gameInfo* info);
+int initialize(int cell_color[SIZE_V][SIZE_H], struct gameInfo* info);
 int process_input(void);
 int rotate_graph(int graph[4][4]);
 int graph_mino(int graph[4][4], struct mino* current_mino);
-int put_mino(struct mino* current_mino);
-int move_mino(struct mino* current_mino, int bitflag);
-int check_line(void);
-int repaint(struct gameInfo* info);
-int update(struct gameInfo* info);
+int put_mino(int cell_color[SIZE_V][SIZE_H], struct mino* current_mino);
+int move_mino(int cell_color[SIZE_V][SIZE_H], struct mino* current_mino, int bitflag);
+int check_line(int cell_color[SIZE_V][SIZE_H]);
+int repaint(int cell_color[SIZE_V][SIZE_H], struct gameInfo* info);
+int update(int cell_color[SIZE_V][SIZE_H], struct gameInfo* info);
 int tetoris(void);
 
 /*  
@@ -213,7 +211,7 @@ int next_mino(struct gameInfo* info){
 /**
  * 盤面を含むゲーム情報全般を初期化する. 
 */
-int initialize(struct gameInfo* info){
+int initialize(int cell_color[SIZE_V][SIZE_H], struct gameInfo* info){
     system("clear");
     srand(time(NULL));
 
@@ -237,13 +235,13 @@ int initialize(struct gameInfo* info){
             cell_color[y][x] = BACKGROUND;
         }
     }
-    put_mino(&(info->current_mino));
+    put_mino(cell_color, &(info->current_mino));
 
     printf("\n\n");
     for(int i = 0;i < SIZE_V; ++i) printf("\n");
     printf("\n");
 
-    repaint(info);
+    repaint(cell_color, info);
 
     return 0;
 }
@@ -271,10 +269,14 @@ int rotate_graph(int graph[4][4]){
 }
 
 /**
-* 指定ミノを指定方向に回転させたときのミノの図を計算する. 
+* 指定ミノを指定方向に回転させたときのミノの図を求める. 
 */
 int graph_mino(int graph[4][4], struct mino* current_mino){
-    graph = mino_graph[current_mino->mino_id];
+    for(int i = 0; i < 4; ++i){
+        for(int j = 0; j < 4; ++j){
+            graph[i][j] = mino_graph[current_mino->mino_id][i][j];
+        }
+    }
 
     if(current_mino->mino_id != ID_O){
         for(int i = 0; i < current_mino->rotate; ++i) rotate_graph(graph);
@@ -287,7 +289,7 @@ int graph_mino(int graph[4][4], struct mino* current_mino){
  * ミノを盤面上に置く. 
  * ミノを指定位置に設置することができない場合は-1を返す. 
 */
-int put_mino(struct mino* current_mino){
+int put_mino(int cell_color[SIZE_V][SIZE_H], struct mino* current_mino){
     int graph[4][4];
     graph_mino(graph, current_mino);
 
@@ -305,10 +307,25 @@ int put_mino(struct mino* current_mino){
 
     for(int i = 0; i < 4; ++i){
         for(int j = 0; j < 4; ++j){
-            if(current_mino->x - 1 + j < 0 || current_mino->x - 1 + j >= SIZE_H
-                || current_mino->y - 1 + i < 0 || current_mino->y - 1 + i >= SIZE_V){
+            if(current_mino->x - 1 + j >= 0 && current_mino->x - 1 + j < SIZE_H
+                && current_mino->y - 1 + i >= 0 && current_mino->y - 1 + i < SIZE_V){
                 
-                cell_color[current_mino->y-1+i][current_mino->x-1+j] = COLOR_I;//graph[i][j];
+                cell_color[current_mino->y-1+i][current_mino->x-1+j] = graph[i][j];
+            }
+        }
+    }
+
+    return 0;
+}
+
+int delete_mino(int cell_color[SIZE_V][SIZE_H], struct mino* current_mino){
+    int graph[4][4];
+    graph_mino(graph, current_mino);
+
+    for(int i = 0; i < 4; ++i){
+        for(int j = 0; j < 4; ++j){
+            if(graph[i][j] != BACKGROUND){
+                cell_color[current_mino->y-1+i][current_mino->x-1+j] = BACKGROUND;
             }
         }
     }
@@ -320,7 +337,7 @@ int put_mino(struct mino* current_mino){
  * 操作中のミノをbitflagの内容に従って動かして, 0を返す. 
  * ただし, ミノが動かせない状況である場合はミノを動かさず, -1を返す. 
 */
-int move_mino(struct mino* current_mino, int bitflag){
+int move_mino(int cell_color[SIZE_V][SIZE_H], struct mino* current_mino, int bitflag){
     struct mino mino_cpy = *current_mino;
     
     if(bitflag&MOVE_ROTATE_L) current_mino->rotate = (current_mino->rotate + 4 + 1)%4;
@@ -329,12 +346,13 @@ int move_mino(struct mino* current_mino, int bitflag){
     if(bitflag&MOVE_R) current_mino->x += 1;
     if(bitflag&MOVE_SOFT_DROP) current_mino->y += 1;
 
-    //判定関数を利用
+    delete_mino(cell_color, current_mino);
+    int isPossible = put_mino(cell_color, current_mino);
     
     return 0;
 }
 
-int check_line(void){
+int check_line(int cell_color[SIZE_V][SIZE_H]){
     int counter = 0;
     for(int y = 0; y < SIZE_V; ++y){
         int flag = 1;
@@ -364,7 +382,7 @@ int check_line(void){
  * 第3行目からSIZE_H(=20)行にわたり盤面を行事する. 
  * 第23行目にはSCOREを表示する. 
 */
-int repaint(struct gameInfo* info){
+int repaint(int cell_color[SIZE_V][SIZE_H], struct gameInfo* info){
     printf("\e[%dA", 1+SIZE_V+2);
     
     printf("\e[2K");
@@ -449,7 +467,7 @@ int process_input(void){
  * 4. 描画
  * の順で処理を行う.
 */
-int update(struct gameInfo* info){
+int update(int cell_color[SIZE_V][SIZE_H], struct gameInfo* info){
     info->frame += 1;
     int bitflag = process_input();
     if(bitflag&QUIT){
@@ -457,11 +475,11 @@ int update(struct gameInfo* info){
         return 0;
     }
     
-    int isMoved = move_mino(&(info->current_mino), bitflag);
+    int isMoved = move_mino(cell_color, &(info->current_mino), bitflag);
     //動いていなければ, そのときの処理をおこなう(後で書く)
 
-    check_line();
-    repaint(info);
+    check_line(cell_color);
+    repaint(cell_color, info);
 
     return 0;
 }
@@ -470,8 +488,9 @@ int tetoris(void){
     struct gameInfo info;
 
     struct timeval pre_time, current_time;
+    int cell_color[SIZE_V][SIZE_H];
     
-    initialize(&info);
+    initialize(cell_color, &info);
 
     gettimeofday(&pre_time, NULL);
     while(info.isRunning){
@@ -482,7 +501,7 @@ int tetoris(void){
             pre_time = current_time;
         }
 
-        update(&info);
+        update(cell_color, &info);
     }
     
     system("clear");
