@@ -246,7 +246,7 @@ int initialize(int cell_color[SIZE_V][SIZE_H], struct gameInfo* info){
     put_mino(cell_color, &(info->current_mino));
 
     printf("\n\n");
-    for(int i = 0;i < SIZE_V; ++i) printf("\n");
+    for(int i = 0;i < SIZE_V+SIZE_GRAPH; ++i) printf("\n");
     printf("\n");
 
     repaint(cell_color, info);
@@ -354,22 +354,31 @@ int move_mino(int cell_color[SIZE_V][SIZE_H], struct mino* current_mino, int bit
     struct mino mino_cpy = *current_mino;
     delete_mino(cell_color, current_mino);
 
-    if(bitflag&MOVE_ROTATE_L) current_mino->rotate = (current_mino->rotate + 4 - 1)%4;
-    if(bitflag&MOVE_ROTATE_R) current_mino->rotate = (current_mino->rotate + 4 + 1)%4;
-    if(bitflag&MOVE_L) current_mino->x -= 1;
-    if(bitflag&MOVE_R) current_mino->x += 1;
-    if(bitflag&MOVE_SOFT_DROP) current_mino->y += 1;
-
     if(bitflag&MOVE_HARD_DROP) {
         while(move_mino(cell_color, current_mino, MOVE_SOFT_DROP) == 0);
         current_mino->stopping_frame = FPS;
         return -1;
     }
 
+    if(bitflag&MOVE_ROTATE_L) current_mino->rotate = (current_mino->rotate + 4 - 1)%4;
+    if(bitflag&MOVE_ROTATE_R) current_mino->rotate = (current_mino->rotate + 4 + 1)%4;
+    if(bitflag&MOVE_L) current_mino->x -= 1;
+    if(bitflag&MOVE_R) current_mino->x += 1;
+    if(bitflag&MOVE_SOFT_DROP) current_mino->y += 1;
+
     int isPossible = put_mino(cell_color, current_mino);
     if(isPossible == -1){
         *current_mino = mino_cpy;
         put_mino(cell_color, current_mino);
+
+        if((bitflag&MOVE_ROTATE_L) | (bitflag&MOVE_ROTATE_R)){
+            if(bitflag&MOVE_SOFT_DROP){
+                return -1;
+            }else{
+                move_mino(cell_color, current_mino, bitflag | MOVE_SOFT_DROP);
+            }
+        }
+
         return -1;
     }
     
@@ -385,6 +394,8 @@ int pop_next(int cell_color[SIZE_V][SIZE_H], struct gameInfo* info){
 
     int game_over = put_mino(cell_color, &(info->current_mino));
     if(game_over) return -1;
+
+    info->mino_seed.i += 1;
 
     return 0;
 }
@@ -420,12 +431,27 @@ int check_line(int cell_color[SIZE_V][SIZE_H]){
  * 第23行目にはSCOREを表示する. 
 */
 int repaint(int cell_color[SIZE_V][SIZE_H], struct gameInfo* info){
-    printf("\e[%dA", 1+SIZE_V+2);
-    
-    printf("\e[2K");
-    printf("\rHOLD: %d\n", info->hold);
-    printf("\e[2K");
-    printf("\rNEXT: %d\n", next_mino(info));
+    printf("\e[%dA", SIZE_GRAPH+SIZE_V+3);
+
+    char hold[5] = "HOLD ";
+    char next[5] = "NEXT ";
+    int nextMino = next_mino(info);
+
+    for(int i = 0; i < SIZE_GRAPH; ++i){
+        printf("\r\e[2K");
+        printf("%c", hold[i]);
+        for(int j = 0; j < SIZE_GRAPH; ++j){
+            printf("\x1b[%dm  \x1b[m", mino_graph[info->hold][i][j]);
+        }
+        printf("\x1b[0m");
+        printf("%c", next[i]);
+        for(int j = 0; j < SIZE_GRAPH; ++j){
+            printf("\x1b[%dm  \x1b[m", mino_graph[nextMino][i][j]);
+        }
+        printf("\x1b[0m");
+        printf("\n");
+    }
+    printf("\n");
     
     for(int y = 0; y < SIZE_V; ++y){
         printf("\r");
@@ -509,6 +535,24 @@ int update(int cell_color[SIZE_V][SIZE_H], struct gameInfo* info){
     if(bitflag&QUIT){
         info->isRunning = 0;
         return 0;
+    }else if(bitflag&MOVE_HOLD){
+        delete_mino(cell_color, &(info->current_mino));
+        int hold_mino = info->hold;
+        info->hold = info->current_mino.mino_id;
+        if(hold_mino != 7){
+            info->current_mino.mino_id = hold_mino;
+            info->current_mino.rotate = 0;
+            info->current_mino.stopping_frame = 0;
+            info->current_mino.x = 4;
+            info->current_mino.y = 1;
+            if(put_mino(cell_color, &(info->current_mino))){
+                return -1;
+            }
+        }else{
+            if(pop_next(cell_color, info)){
+                return -1;
+            }
+        }
     }
     
     int isMoved = move_mino(cell_color, &(info->current_mino), bitflag);
