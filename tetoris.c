@@ -143,6 +143,9 @@ int tetoris(void);
 */
 /*******************************************************************************/
 
+/**
+ * シグナルに対する応答を返す. 
+*/
 static void onsignal(int sig) {
     signal(sig, SIG_IGN);
     switch(sig){
@@ -154,6 +157,10 @@ static void onsignal(int sig) {
       break;
     }
 }
+
+/**
+ * 非カノニカルモードに設定する他, コンソールの初期設定を行う. 
+*/
 int tinit(void) {
     if (tcgetattr(1, &otty) < 0)
       return -1;
@@ -169,10 +176,19 @@ int tinit(void) {
     signal(SIGTERM, onsignal);
     signal(SIGHUP, onsignal);
 }
+
+/**
+ * コンソール設定をリセットする. 
+*/
 void reset(void) {
     tcsetattr(1, TCSADRAIN, &otty);
     write(1, "\n", 1);
 }
+
+/**
+ * キー入力があるか確かめ, 
+ * キー入力があれば1を, 無ければ0を返す. 
+*/
 int kbhit(void) {
     int ret;
     fd_set rfd;
@@ -185,6 +201,10 @@ int kbhit(void) {
     else
       return 0;
 }
+
+/**
+ * キー入力を読み込む. 
+*/
 int getch(void) {
     unsigned char c;
     int n;
@@ -255,7 +275,7 @@ int initialize(int cell_color[SIZE_V][SIZE_H], struct gameInfo* info){
 }
 
 /**
- * 反時計回りにグラフを90度回転させる. 
+ * 反時計回りに図を90度回転させる. 
 */
 int rotate_graph(int graph[SIZE_GRAPH][SIZE_GRAPH]){
     int rotated_graph[SIZE_GRAPH][SIZE_GRAPH];
@@ -327,6 +347,9 @@ int put_mino(int cell_color[SIZE_V][SIZE_H], struct mino* current_mino){
     return 0;
 }
 
+/**
+ * 操作中のミノを盤面上から削除する. 
+*/
 int delete_mino(int cell_color[SIZE_V][SIZE_H], struct mino* current_mino){
     int graph[SIZE_GRAPH][SIZE_GRAPH];
     graph_mino(graph, current_mino);
@@ -385,6 +408,10 @@ int move_mino(int cell_color[SIZE_V][SIZE_H], struct mino* current_mino, int bit
     return 0;
 }
 
+/**
+ * NEXT MINOを盤面上に置き, これを操作中のミノとする. 
+ * 盤面上にNEXT MINOを設置出来なければ-1を返す. 
+*/
 int pop_next(int cell_color[SIZE_V][SIZE_H], struct gameInfo* info){
     info->current_mino.mino_id = next_mino(info);
     info->current_mino.rotate = 0;
@@ -400,6 +427,10 @@ int pop_next(int cell_color[SIZE_V][SIZE_H], struct gameInfo* info){
     return 0;
 }
 
+/**
+ * 盤面上にすべてのセルが埋まった行がないか確認し, 
+ * 存在すればその行を削除して上のすべての行を基の位置から下に一行ずらす.
+*/
 int check_line(int cell_color[SIZE_V][SIZE_H]){
     int counter = 0;
     for(int y = 0; y < SIZE_V; ++y){
@@ -426,9 +457,10 @@ int check_line(int cell_color[SIZE_V][SIZE_H]){
 
 /**
  * cell_color及びgmae infoの情報を元に, ゲーム画面を表示する. 
- * ゲーム画面は, 第1行目にHOLD MINO, 第2行目にNEXT MINO
- * 第3行目からSIZE_H(=20)行にわたり盤面を行事する. 
- * 第23行目にはSCOREを表示する. 
+ * ゲーム画面は, 第1行から第5行までの5行のうち
+ * 左側にHOLD MINO, 右側にNEXT MINOを表示する. 
+ * 第6行目からSIZE_H(=20)行にわたり盤面を表示する. 
+ * 第26行目にはSCOREを表示する. 
 */
 int repaint(int cell_color[SIZE_V][SIZE_H], struct gameInfo* info){
     printf("\e[%dA", SIZE_GRAPH+SIZE_V+3);
@@ -439,12 +471,12 @@ int repaint(int cell_color[SIZE_V][SIZE_H], struct gameInfo* info){
 
     for(int i = 0; i < SIZE_GRAPH; ++i){
         printf("\r\e[2K");
-        printf("%c", hold[i]);
+        printf("%c ", hold[i]);
         for(int j = 0; j < SIZE_GRAPH; ++j){
             printf("\x1b[%dm  \x1b[m", mino_graph[info->hold][i][j]);
         }
         printf("\x1b[0m");
-        printf("%c", next[i]);
+        printf("%c ", next[i]);
         for(int j = 0; j < SIZE_GRAPH; ++j){
             printf("\x1b[%dm  \x1b[m", mino_graph[nextMino][i][j]);
         }
@@ -546,11 +578,13 @@ int update(int cell_color[SIZE_V][SIZE_H], struct gameInfo* info){
             info->current_mino.x = 4;
             info->current_mino.y = 1;
             if(put_mino(cell_color, &(info->current_mino))){
-                return -1;
+                info->isRunning = 0;
+                return 0;
             }
         }else{
             if(pop_next(cell_color, info)){
-                return -1;
+                info->isRunning = 0;
+                return 0;
             }
         }
     }
@@ -565,7 +599,8 @@ int update(int cell_color[SIZE_V][SIZE_H], struct gameInfo* info){
             if(move_mino(cell_color, &(info->current_mino), MOVE_SOFT_DROP)){
                 info->score += 100 * check_line(cell_color);
                 if(pop_next(cell_color, info)){
-                    return -1;
+                    info->isRunning = 0;
+                    return 0;
                 }
             }
 
@@ -578,6 +613,9 @@ int update(int cell_color[SIZE_V][SIZE_H], struct gameInfo* info){
     return 0;
 }
 
+/**
+ * テトリス本体の関数ゲーム情報等のインスタンスを用意し, ゲームループを回す. 
+*/
 int tetoris(void){
     struct gameInfo info;
 
